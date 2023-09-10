@@ -9,11 +9,11 @@ Simple C hex-patcher for killing Arxan, crypto, patching connection and more
 ------
 
 ## Usage
-```clang140 libsolar.c -o libsolar -target armv7a-linux-androideabi19 -s``` - for binary compilation
+```clang140 libsolar.c -o libsolar -target armv7a-linux-androideabi19 -s``` - for binary compilation on arm (minimum API is 19)
 
 ------
 
-```clang140 -fPIC -shared libsolar.c -o libsolar -target armv7a-linux-androideabi19 -s``` - for shared library compilation
+```clang140 -fPIC -shared libsolar.c -o libsolar -target armv7a-linux-androideabi19 -s``` - for shared library compilation on arm (minimum API is 19)
 *Also can be compiled with Clang++ and '-static-libstdc++' flag*
 
 *Current pushed version has Brawl Stars v36.218.1 Arxan hex-patching and NaCl crypto hex-patching
