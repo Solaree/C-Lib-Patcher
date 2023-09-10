@@ -13,11 +13,6 @@ int main() {
     printf("[*] Starting patches...\n\n");
 
     int fd = open(lib, O_RDWR);
-    
-    if (fd == -1) {
-        perror("[*] Failed to open library file\n");
-        return 1;
-    }
 
     fstat(fd, &libstat);
 
@@ -51,23 +46,13 @@ int main() {
 
         size_t size = (start_address - page_start) + 4;
 
-        if (mprotect((void*)page_start, size, PROT_READ | PROT_WRITE) == -1) {
-            perror("[*] Failed to protect page for 'rw'\n");
-            close(fd);
-            munmap(mappaddr, libstat.st_size);
-            return 1;
-        }
+        mprotect((void*)page_start, size, PROT_READ | PROT_WRITE);
 
         for (int j = 0; j < 4; j++) {
             *(unsigned char*)(start_address + j) = patchBytes[i][j];
         }
 
-        if (mprotect((void*)page_start, size, PROT_READ) == -1) {
-            perror("[*] Failed to protect page for 'r'\n");
-            close(fd);
-            munmap(mappaddr, libstat.st_size);
-            return 1;
-        }
+        mprotect((void*)page_start, size, PROT_READ);
     }
 
     printf("[*] Patched Arxan and crypto\n");
