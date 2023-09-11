@@ -1,5 +1,5 @@
-#ifndef ASM_H
-#define ASM_H
+#ifndef CLIBPATCH_H
+#define CLIBPATCH_H
 
 #define INSTRUCTION_SET unsigned long /* Bytecode instruction patches for arm assembly */
 
