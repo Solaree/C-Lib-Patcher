@@ -1,8 +1,6 @@
 # C-Lib-Patcher
 Simple C hex-patcher for killing Arxan, crypto, patching connection and more
 
-### *Can be compiled to shared binary and put in the game, or compiled as executable and launched in internal storage*
-
 ## Pre-requirements
 *Clang, Clang++ toolchain from Android NDK*
 
