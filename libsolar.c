@@ -1,13 +1,13 @@
-#include <sys/types.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <string.h>
+#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
+#include <sys/types.h>
 
 int main() {
-    const char* lib = "/data/user/0/com.supercell.brawlstars/lib/libg.so";
+    const char* lib = "/data/data/com.supercell.brawlstars/lib/libg.so";
     struct stat libstat;
 
     printf("[*] Starting patches...\n\n");
@@ -27,18 +27,9 @@ int main() {
         return 1;
     }
 
-    uintptr_t offsets[] = {
-        0x33CC04, 0x66DCEC, 0x68DE6C, 0x493304, 0x68A718, 0x7D8858, 0x39AD0C, 0x8339F4, 0xB95D8,
-        0x2174A4, 0x6708A0, 0x4672EC, 0x670808
-    };
+    uintptr_t offsets[] = { 0x000000 };
 
-    unsigned char patchBytes[][4] = {
-        {0x1D, 0x00, 0x00, 0xEB}, {0xEB, 0x00, 0x00, 0xEB}, {0x08, 0x04, 0x00, 0xEB},
-        {0xE7, 0x02, 0x00, 0xEB}, {0xB6, 0x02, 0x00, 0xEB}, {0xF5, 0x00, 0x00, 0xEB},
-        {0x12, 0x06, 0x00, 0xEB}, {0x1E, 0xFF, 0x2F, 0xE1}, {0x1E, 0xFF, 0x2F, 0xE1},
-        {0x00, 0x00, 0x50, 0xE1}, {0x05, 0x00, 0xA0, 0xE3}, {0x00, 0x40, 0xA0, 0xE3},
-        {0x02, 0x80, 0xA0, 0xE1}
-    };
+    unsigned char patchBytes[][4] = { 0x00, 0x00, 0x00, 0x00 };
 
     for (int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++) {
         uintptr_t start_address = (uintptr_t)mappaddr + offsets[i];
@@ -51,11 +42,10 @@ int main() {
         for (int j = 0; j < 4; j++) {
             *(unsigned char*)(start_address + j) = patchBytes[i][j];
         }
-
-        mprotect((void*)page_start, size, PROT_READ);
+        mprotect((void*)page_start, size, PROT_READ | PROT_EXEC);
     }
 
-    printf("[*] Patched Arxan and crypto\n");
+    printf("[*] Patched\n");
 
     msync(mappaddr, libstat.st_size, MS_SYNC);
 
