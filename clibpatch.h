@@ -3,7 +3,7 @@
 
 #define INSTRUCTION_SET unsigned long /* Bytecode instruction patches for arm assembly */
 
-unsigned long armHex(const char* hexString) {
+INSTRUCTION_SET armHex(const char* hexString) {
     char* cleanHexString = malloc(strlen(hexString) + 1);
     int cleanIndex = 0;
 
