@@ -18,5 +18,3 @@ Simple C hex-patcher for killing Arxan, crypto, patching connection and more
 ------
 
 *Also can be compiled with Clang++ and '-static-libstdc++' flag*
-
-*Current pushed version has Brawl Stars v36.218.1 Arxan hex-patching and NaCl crypto hex-patching
