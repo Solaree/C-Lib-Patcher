@@ -56,19 +56,11 @@ int main() {
     char libPath[512];
 
     uintptr_t OFFSETS[] = {
-        0x33CC04, 0x66DCEC, 0x68DE6C,
-        0x493304, 0x68A718, 0x7D8858,
-        0x39AD0C, 0x8339F4, 0xB95D8,
-        0x2174A4, 0x6708A0, 0x4672EC,
-        0x670808
+        0x000000
     };
 
     unsigned long PATCHBYTES[] = {
-        0xEB00001D, 0xEB0000EB, 0xEB000408,
-        0xEB0002E7, 0xEB0002B6, 0xEB0000F5,
-        0xEB000612, putRet(), putRet(),
-        0xE1500000, 0xE3A00005, 0xE3A04000,
-        0xE1A08002
+        putRet();
     };
 
     if (PID != -1) {
