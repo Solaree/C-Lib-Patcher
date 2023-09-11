@@ -16,6 +16,35 @@
 #include <sys/syscall.h>
 #include "clibpatch.h"
 
+unsigned long armHex(const char* hexString) {
+    char* cleanHexString = malloc(strlen(hexString) + 1);
+    int cleanIndex = 0;
+
+    for (int i = 0; hexString[i] != '\0'; i++) {
+        if (hexString[i] != ' ') {
+            cleanHexString[cleanIndex++] = hexString[i];
+        }
+    }
+    cleanHexString[cleanIndex] = '\0';
+    INSTRUCTION_SET hexValue = strtoul(cleanHexString, NULL, 16);
+
+    free(cleanHexString);
+    return hexValue;
+}
+
+INSTRUCTION_SET putRet() {
+    return armHex("1E FF 2F E1");
+} /* NOP */
+INSTRUCTION_SET putNop() {
+    return armHex("00 F0 20 E3");
+} /* BX LR */
+INSTRUCTION_SET putValZero() {
+    return armHex("00 00 A0 E3");
+} /* MOV R0, #0 */
+INSTRUCTION_SET putValOne() {
+    return armHex("01 00 A0 E3");
+} /* MOV R0, #1 */
+
 int getPidFromPackageName(const char* PACKAGE) {
     char path[512];
 
@@ -46,22 +75,29 @@ int getPidFromPackageName(const char* PACKAGE) {
     return -1;
 }
 
-int main() {
-    const char* PACKAGE = "com.supercell.brawlstars";
+int mempatch(const char* PACKAGE, const char* LIBNAME, uintptr_t OFFSETS[], unsigned long PATCHBYTES[], size_t numPatches) {
+    // const char* PACKAGE = "com.supercell.brawlstars";
     int PID = getPidFromPackageName(PACKAGE);
 
     uintptr_t libBase = 0;
 
-    char libName[] = "libg.so";
     char libPath[512];
 
-    uintptr_t OFFSETS[] = {
-        0x000000
+    /*uintptr_t OFFSETS[] = {
+        0x33CC04, 0x66DCEC, 0x68DE6C,
+        0x493304, 0x68A718, 0x7D8858,
+        0x39AD0C, 0x8339F4, 0xB95D8,
+        0x2174A4, 0x6708A0, 0x4672EC,
+        0x670808
     };
 
     unsigned long PATCHBYTES[] = {
-        putRet();
-    };
+        0xEB00001D, 0xEB0000EB, 0xEB000408,
+        0xEB0002E7, 0xEB0002B6, 0xEB0000F5,
+        0xEB000612, putRet(), putRet(),
+        0xE1500000, 0xE3A00005, 0xE3A04000,
+        0xE1A08002
+    };*/
 
     if (PID != -1) {
         printf("[*] Package Name: %s\n[*] PID: %d\n", PACKAGE, PID);
@@ -82,7 +118,7 @@ int main() {
         char line[256];
 
         while (fgets(line, sizeof(line), mapsFile)) {
-            if (strstr(line, libName)) {
+            if (strstr(line, LIBNAME)) {
                 char* dash = strchr(line, '-');
                 if (dash) {
                     *dash = '\0';
@@ -94,7 +130,9 @@ int main() {
         fclose(mapsFile);
     }
 
-    for (size_t i = 0; i < sizeof(OFFSETS) / sizeof(OFFSETS[0]); i++) {
+    // size_t numPatches = sizeof(OFFSETS) / sizeof(OFFSETS[0]);
+
+    for (size_t i = 0; i < numPatches; i++) {
         uintptr_t patchAddress = libBase + OFFSETS[i];
 
         ptrace(PTRACE_POKETEXT, PID, (void*)patchAddress, (void*)PATCHBYTES[i]);

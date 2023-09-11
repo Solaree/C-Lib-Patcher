@@ -6,13 +6,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-int main() {
-    const char* lib = "/data/data/com.supercell.brawlstars/lib/libg.so";
+int staticpatch(const char* LIB, uintptr_t OFFSETS[], unsigned char PATCHBYTES[], size_t numPatches) {
+    // const char* LIB = "/data/data/com.supercell.brawlstars/lib/libg.so";
     struct stat libstat;
 
     printf("[*] Starting patches...\n\n");
 
-    int fd = open(lib, O_RDWR);
+    int fd = open(LIB, O_RDWR);
 
     fstat(fd, &libstat);
 
@@ -27,12 +27,12 @@ int main() {
         return 1;
     }
 
-    uintptr_t offsets[] = { 0x000000 };
+    // uintptr_t OFFSETS[] = { 0x000000 };
+    // unsigned char PATCHBYTES[] = { 0x00 };
+    // size_t numPatches = sizeof(OFFSETS) / sizeof(OFFSETS[0]);
 
-    unsigned char patchBytes[][4] = { 0x00, 0x00, 0x00, 0x00 };
-
-    for (int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++) {
-        uintptr_t start_address = (uintptr_t)mappaddr + offsets[i];
+    for (int i = 0; i < numPatches; i++) {
+        uintptr_t start_address = (uintptr_t)mappaddr + OFFSETS[i];
         uintptr_t page_start = start_address & ~(4095UL);
 
         size_t size = (start_address - page_start) + 4;
@@ -40,7 +40,7 @@ int main() {
         mprotect((void*)page_start, size, PROT_READ | PROT_WRITE);
 
         for (int j = 0; j < 4; j++) {
-            *(unsigned char*)(start_address + j) = patchBytes[i][j];
+            *(unsigned char*)(start_address + j) = PATCHBYTES[i];
         }
         mprotect((void*)page_start, size, PROT_READ | PROT_EXEC);
     }
