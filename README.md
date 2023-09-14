@@ -2,7 +2,7 @@
 Simple C hex-patcher for killing Arxan, crypto, patching connection and more
 
 ## Pre-requirements
-*Clang, Clang++ toolchain from Android NDK*
+*Clang toolchain from Android NDK*
 
 ------
 
