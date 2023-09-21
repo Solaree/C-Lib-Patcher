@@ -1,3 +1,8 @@
+/*
+* injector.cpp 
+* 9/21/2023
+*/
+
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -5,7 +10,8 @@
 
 using namespace std;
 
-void symbolWarn(void* func, const char* symbolName)
+template<typename FuncType>
+void symbolWarn(FuncType func, const char* symbolName)
 {
     if (func == nullptr)
     {
@@ -28,7 +34,7 @@ int main(int argc, char** argv)
     }
     else
     {
-        system("clang++ -fPIC -shared -o libpatch.so clibpatch.so -target armv7a-linux-androideabi19");
+        system("clang++ -fPIC -shared -o libpatch.so clibpatch.so -target armv7a-linux-androideabi19 -static-libstdc++");
     }
 
     const char* target_pkg = argv[1];
