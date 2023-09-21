@@ -14,7 +14,7 @@ Compile to shared library:
 Or use in-runtime injector:
 ```clang++ -o injector injector.cpp -target armv7a-linux-androideabi19 -static-libstdc++``` - for binary compilation on arm (minimum API is 19)
 
-Open with termux or adb shell:
+Load binary with termux or adb shell:
 ```adb root``` *requires root (Magisk, SuperSU, etc.)*
 ```adb push injector /data/bin/injector```
 ```chmod 777 /data/bin/injector```
