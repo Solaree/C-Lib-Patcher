@@ -57,21 +57,28 @@ int main(int argc, char** argv)
     getPidFromPkgName getPid = reinterpret_cast<getPidFromPkgName>(dlsym(handle, getPidFromPkgNameSymbol));
     symbolWarn(getPid, getPidFromPkgNameSymbol);
 
-    int pid = getPid(target_pkg);
+    int pid = getPid(target_pkg); // getting pid
 
     const char* attachToSymbol = "_Z8attachToPKcS0_";
     typedef int (*attachTo)(int);
     attachTo attach = reinterpret_cast<attachTo>(dlsym(handle, attachToSymbol));
     symbolWarn(attach, attachToSymbol);
 
-    attach(pid);
+    attach(pid); // attaching to pid
 
     const char* patchSymbol = "_ZN9ArmWriter9putValOneEj";
     typedef int (*putValOneFunction)(int);
     putValOneFunction putValOne = reinterpret_cast<putValOneFunction>(dlsym(handle, patchSymbol));
     symbolWarn(putValOne, patchSymbol);
 
-    putValOne(0x00000 /* your library offset here ...*/);
+    putValOne(0x00000 /* your library offset here ...*/); // patch offset
+
+    const char* detachFromSymbol = "_Z10detachFromi";
+    typedef int (*detachFrom)(int);
+    detachFrom detach = reinterpret_cast<detachFrom>(dlsym(handle, detachFromSymbol));
+    symbolWarn(detach, detachFromSymbol);
+
+    detach(pid); // detaching from pid
 
     dlclose(handle);
     return 0;
