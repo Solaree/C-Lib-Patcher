@@ -26,7 +26,6 @@ class ArmWriter
 {
 public:
     ArmWriter(pid_t pid, uintptr_t base);
-    ~ArmWriter();
 
     void putBytes(uintptr_t offset, const char* bytes);
     void putStaticBytes(const char* libpath, uintptr_t offset, const char* bytes);
