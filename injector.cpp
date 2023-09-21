@@ -34,7 +34,7 @@ int main(int argc, char** argv)
     }
     else
     {
-        system("clang++ -fPIC -shared -o libpatch.so clibpatch.so -target armv7a-linux-androideabi19 -static-libstdc++");
+        system("clang++ -fPIC -shared -o libpatch.so clibpatch.cpp -target armv7a-linux-androideabi19 -static-libstdc++ && clear");
     }
 
     const char* target_pkg = argv[1];
