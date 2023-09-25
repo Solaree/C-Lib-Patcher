@@ -94,6 +94,7 @@ int main(int argc, char** argv)
     readUIntFunction readUInt = reinterpret_cast<readUIntFunction>(dlsym(handle, readUIntSymbol));
     symbolWarn(readUInt, readUIntSymbol);
 
+
     int pid = getPid(target_pkg); // getting pid
 
     attach("com.supercell.brawlstars", "libg.so"); // attaching to pid library
