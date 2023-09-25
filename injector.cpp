@@ -1,11 +1,13 @@
 /*
-* injector.cpp 
+* injector.cpp
 * 9/21/2023
+* Updated 9/25/2023
 */
 
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <unistd.h>
+
 #include <iostream>
 
 using namespace std;
@@ -34,7 +36,12 @@ int main(int argc, char** argv)
     }
     else
     {
-        system("clang++ -fPIC -shared -o libpatch.so clibpatch.cpp -target armv7a-linux-androideabi19 -static-libstdc++ && clear");
+        int compileResult = system("clang++ -fPIC -shared -o libpatch.so clibpatch.cpp -target armv7a-linux-androideabi19 -static-libstdc++ && clear");
+        if (compileResult != 0)
+        {
+            cout << "[*] Compilation of libpatch.so failed. Please install and add clang++ to the PATH variable" << endl;
+        }
+        return 1;
     }
 
     const char* target_pkg = argv[1];
@@ -52,33 +59,49 @@ int main(int argc, char** argv)
     }
 
     // Usage example
-    const char* getPidFromPkgNameSymbol = "_Z17getPidFromPkgNamePKc";
-    typedef int (*getPidFromPkgName)(const char*);
-    getPidFromPkgName getPid = reinterpret_cast<getPidFromPkgName>(dlsym(handle, getPidFromPkgNameSymbol));
-    symbolWarn(getPid, getPidFromPkgNameSymbol);
-
-    int pid = getPid(target_pkg); // getting pid
-
     const char* attachToSymbol = "_Z8attachToPKcS0_";
-    typedef int (*attachTo)(int);
+    typedef int (*attachTo)(const char*, const char*);
     attachTo attach = reinterpret_cast<attachTo>(dlsym(handle, attachToSymbol));
     symbolWarn(attach, attachToSymbol);
-
-    attach(pid); // attaching to pid
-
-    const char* patchSymbol = "_ZN9ArmWriter9putValOneEj";
-    typedef int (*putValOneFunction)(int);
-    putValOneFunction putValOne = reinterpret_cast<putValOneFunction>(dlsym(handle, patchSymbol));
-    symbolWarn(putValOne, patchSymbol);
-
-    putValOne(0x00000 /* your library offset here ...*/); // patch offset
 
     const char* detachFromSymbol = "_Z10detachFromi";
     typedef int (*detachFrom)(int);
     detachFrom detach = reinterpret_cast<detachFrom>(dlsym(handle, detachFromSymbol));
     symbolWarn(detach, detachFromSymbol);
 
-    detach(pid); // detaching from pid
+    const char* getAllMapsSymbol = "_Z10getAllMapsPcj";
+    typedef int (*getAllMapsFunction)(char*, size_t);
+    getAllMapsFunction getAllMaps = reinterpret_cast<getAllMapsFunction>(dlsym(handle, getAllMapsSymbol));
+    symbolWarn(getAllMaps, getAllMapsSymbol);
+
+    const char* getMapByNameSymbol = "_Z12getMapByNamePKc";
+    typedef void (*getMapByNameFunction)(const char*);
+    getMapByNameFunction getMapByName = reinterpret_cast<getMapByNameFunction>(dlsym(handle, getMapByNameSymbol));
+    symbolWarn(getMapByName, getMapByNameSymbol);
+
+    const char* getPidFromPkgNameSymbol = "_Z17getPidFromPkgNamePKc";
+    typedef int (*getPidFromPkgNameFunction)(const char*);
+    getPidFromPkgNameFunction getPidFromPkgName = reinterpret_cast<getPidFromPkgNameFunction>(dlsym(handle, getPidFromPkgNameSymbol));
+    symbolWarn(getPidFromPkgName, getPidFromPkgNameSymbol);
+
+    const char* putUIntSymbol = "_ZN9ArmWriter7putUIntEjPKcS1_";
+    typedef int (*putUIntFunction)(int);
+    putUIntFunction putUInt = reinterpret_cast<putUIntFunction>(dlsym(handle, putUIntSymbol));
+    symbolWarn(putUInt, putUIntSymbol);
+
+    const char* readUIntSymbol = "_ZN9ArmReader8readUIntEj";
+    typedef int (*readUIntFunction)(int);
+    readUIntFunction readUInt = reinterpret_cast<readUIntFunction>(dlsym(handle, readUIntSymbol));
+    symbolWarn(readUInt, readUIntSymbol);
+
+    int pid = getPid(target_pkg); // getting pid
+
+    attach("com.supercell.brawlstars", "libg.so"); // attaching to pid library
+
+    putUInt(0x00000 /* your library offset here ... */, 255 /* you patch value here ... */); // patch offset
+    readUInt(0x0000 /* your library offset here ... */); // read offset
+
+    detach(pid); // detaching from pid library
 
     dlclose(handle);
     return 0;
