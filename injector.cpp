@@ -100,7 +100,7 @@ int main(int argc, char** argv)
     attach("com.supercell.brawlstars", "libg.so"); // attaching to pid library
 
     putUInt(0x00000 /* your library offset here ... */, 255 /* you patch value here ... */); // patch offset
-    readUInt(0x0000 /* your library offset here ... */); // read offset
+    readUInt(0x00000 /* your library offset here ... */); // read offset
 
     detach(pid); // detaching from pid library
 
