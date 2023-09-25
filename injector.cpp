@@ -39,7 +39,7 @@ int main(int argc, char** argv)
         int compileResult = system("clang++ -fPIC -shared -o libpatch.so clibpatch.cpp -target armv7a-linux-androideabi19 -static-libstdc++ && clear");
         if (compileResult != 0)
         {
-            cout << "[*] Compilation of libpatch.so failed. Please install and add clang++ to the PATH variable" << endl;
+            cout << "[!] Compilation of libpatch.so failed. Please install and add clang++ to the PATH variable" << endl;
         }
         return 1;
     }
