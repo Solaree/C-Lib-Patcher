@@ -9,7 +9,7 @@ Simple C hex-patcher for killing Arxan, crypto, patching connection and more
 ## Usage
 
 Compile to shared library:
-```clang++ -fPIC -shared -o libpatcher.so clibpatcher.cpp -target armv7a-linux-androideabi19 -static-libstdc++``` - for shared library compilation on arm (minimum API is 19)
+```clang++ -fPIC -shared -o libpatch.so libpatch.cpp -target armv7a-linux-androideabi19 -static-libstdc++``` - for shared library compilation on arm (minimum API is 19)
 
 Or use in-runtime injector:
 ```clang++ -o injector injector.cpp -target armv7a-linux-androideabi19 -static-libstdc++``` - for binary compilation on arm (minimum API is 19)
