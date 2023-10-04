@@ -1,12 +1,22 @@
 /*
-* libpatch.cpp
-* 9/14/2023
-* Updated 9/25/2023
+* libpatch.cpp - The Patch C++ Library
+* Copyright (C) 2023 Solar
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details.
 */
 
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <sys/user.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
@@ -20,200 +30,59 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <fstream>
 #include <sstream>
 #include <iostream>
 
 using namespace std;
 
-class ArmWriter
-{
-public:
-    ArmWriter(pid_t pid, uintptr_t base);
+struct user_regs regs;
+vector<unsigned char> buffer;
 
-    void putBytes(uintptr_t offset, const char* bytes);
-    void putStaticBytes(const char* libpath, uintptr_t offset, const char* bytes);
-    void putRet(uintptr_t offset);
-    void putNop(uintptr_t offset);
-    void putValZero(uintptr_t offset);
-    void putValOne(uintptr_t offset);
-    void putUInt(uintptr_t offset, const char* high, const char* little);
-    void putStringR0(uintptr_t strOffset, uintptr_t loadOffset, const char* off1, const char* off2, const char* retval);
-    void putStringR1(uintptr_t strOffset, uintptr_t loadOffset, const char* off1, const char* off2, const char* retval);
-    void protect(uintptr_t off_start, size_t size, const char* perms);
+/* Implement basic functionality:
+* getAllMaps
+* getMapByName
+* getProcesses
+* getLoginUid
+* getPidFromPkgName
+* attachTo
+* detachFrom
+* getLibAddr
+*
+* These functions doesnt have class and are partially related to 'ArmWriter' and 'ArmReader' classes */
 
-private:
-    pid_t PID;
-    uintptr_t libBase;
-};
-
-ArmWriter::ArmWriter(pid_t pid, uintptr_t base) : PID(pid), libBase(base)
-{
-}
-
-class ArmReader
-{
-public:
-    ArmReader(pid_t pid, uintptr_t base);
-
-    char* readBytes(uintptr_t offset, size_t size);
-    string readString(uintptr_t offset);
-    uint32_t readUInt(uintptr_t offset);
-    long long readLong(uintptr_t offset);
-
-private:
-    pid_t PID;
-    uintptr_t libBase;
-};
-
-ArmReader::ArmReader(pid_t pid, uintptr_t base) : PID(pid), libBase(base)
-{
-}
-
-void ArmWriter::putStaticBytes(const char* libpath, uintptr_t offset, const char* bytes)
-{
-    int fd = open(libpath, O_RDWR);
-    struct stat libstat;
-    fstat(fd, &libstat);
-    void* mappaddr = mmap(NULL, libstat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mappaddr == MAP_FAILED)
-    {
-        perror("[!] Failed to mmap library file\n");
-        close(fd);
-        return;
-    }
-    uintptr_t start_address = (uintptr_t)mappaddr + offset;
-    uintptr_t page_start = start_address & ~(4095UL);
-    size_t size = (start_address - page_start) + 4;
-    protect(page_start, size, "rw");
-    for (int i = 0; i < 4; i++)
-    {
-        *(unsigned char*)(start_address + i) = strtol(bytes + (i * 2), NULL, 16);
-    }
-    protect(page_start, size, "rx");
-    msync(mappaddr, libstat.st_size, MS_SYNC);
-    munmap(mappaddr, libstat.st_size);
-    close(fd);
-}
-void ArmWriter::putBytes(uintptr_t offset, const char* bytes)
-{
-    uintptr_t patchAddress = libBase + offset;
-    ptrace(PTRACE_POKETEXT, PID, (void*)patchAddress, (void*)strtoul(bytes, NULL, 16));
-}
-void ArmWriter::putRet(uintptr_t offset)
-{
-    putBytes(offset, "1E FF 2F E1"); // BX LR
-}
-void ArmWriter::putNop(uintptr_t offset)
-{
-    putBytes(offset, "00 00 00 EA"); // NOP
-}
-void ArmWriter::putValZero(uintptr_t offset)
-{
-    putBytes(offset, "00 00 A0 E3"); // MOV R0, #0
-}
-void ArmWriter::putValOne(uintptr_t offset)
-{
-    putBytes(offset, "01 00 A0 E3"); // MOV R0, #1
-}
-void ArmWriter::putUInt(uintptr_t offset, const char* high, const char* little)
-{
-    string instr = string(high) + " " + little + "A0 E3";
-    putBytes(offset, instr.c_str());
-}
-void ArmWriter::putStringR0(uintptr_t strOffset, uintptr_t loadOffset, const char* off1, const char* off2, const char* retval)
-{
-    putBytes(strOffset, retval);
-    putBytes(loadOffset, (string(off1) + " " + off2 + "9F E5").c_str());
-    putBytes(loadOffset + 4, "00 00 8F E0"); // ADD R0, PC, R0
-}
-void ArmWriter::putStringR1(uintptr_t strOffset, uintptr_t loadOffset, const char* off1, const char* off2, const char* retval)
-{
-    putBytes(strOffset, retval);
-    putBytes(loadOffset, (string(off1) + " " + off2 + "9F E5").c_str());
-    putBytes(loadOffset + 4, "01 10 8F E0"); // ADD R1, PC, R1
-}
-
-void ArmWriter::protect(uintptr_t off_start, size_t size, const char* perms)
-{
-    int prot = 0;
-    if (strcmp(perms, "rwx") == 0 || strcmp(perms, "777") == 0)
-    {
-        prot = PROT_READ | PROT_WRITE | PROT_EXEC;
-    }
-    else if (strcmp(perms, "rw") == 0 || strcmp(perms, "766") == 0)
-    {
-        prot = PROT_READ | PROT_WRITE;
-    }
-    else if (strcmp(perms, "rx") == 0 || strcmp(perms, "755") == 0)
-    {
-        prot = PROT_READ | PROT_EXEC;
-    }
-    else if (strcmp(perms, "r") == 0 || strcmp(perms, "444") == 0)
-    {
-        prot = PROT_READ;
-    }
-    else
-    {
-        cerr << "[!] ArmWriter::protect() ERROR: provide 'rwx' (777), 'rw' (766), 'rx' (755) or 'r' (444)" << endl;
-        return;
-    }
-}
-
-char* ArmReader::readBytes(uintptr_t offset, size_t size) {
-    char* data = new char[size];
-    for (size_t i = 0; i < size; i++) {
-        long byte = ptrace(PTRACE_PEEKTEXT, PID, (void*)(libBase + offset + i), nullptr);
-        data[i] = (char)(byte);
-    }
-    return data;
-}
-string ArmReader::readString(uintptr_t offset) {
-    ostringstream oss;
-    char* buffer = readBytes(offset, 1);
-    while (*buffer != '\0') {
-        oss << *buffer;
-        offset++;
-        buffer = readBytes(offset, 1);
-    }
-    delete[] buffer;
-    return oss.str();
-}
-uint32_t ArmReader::readUInt(uintptr_t offset) {
-    long data = ptrace(PTRACE_PEEKTEXT, PID, (void*)(libBase + offset), nullptr);
-    return (uint32_t)(data);
-}
-long long ArmReader::readLong(uintptr_t offset) {
-    long data = ptrace(PTRACE_PEEKTEXT, PID, (void*)(libBase + offset), nullptr);
-    return (long long)(data);
-}
-
-int getAllMaps(char* buf, size_t bufSize)
+ssize_t getAllMaps(char* buf, size_t bufSize)
 {
     int fd = open("/proc/self/maps", O_RDONLY);
     ssize_t bytesRead = read(fd, buf, bufSize - 1);
-    buf[bytesRead] = '\0';
     close(fd);
+
+    if (bytesRead >= 0) {
+        buf[bytesRead] = '\0';
+    }
     return bytesRead;
 }
-void getMapByName(const char* lib)
+
+void getMapByName(const char* libName)
 {
-    char buf[4096];
-    ssize_t bytesRead = getAllMaps(buf, sizeof(buf));
-    char* line = buf;
-    while (*line != '\0')
+    ifstream mapsFile("/proc/self/maps");
+    if (!mapsFile)
     {
-        if (strstr(line, lib) != nullptr)
-        {
-            cout << "[*] Lib loaded in /proc/self/maps" << endl;
-            break;
-        }
-        line = strchr(line, '\n');
-        if (line == nullptr)
-        {
-            break;
-        }
-        line++;
+        cerr << "[!] Failed to open /proc/self/maps" << endl;
+        return;
     }
+    string line;
+    while (getline(mapsFile, line))
+    {
+        if (line.find(libName) != string::npos)
+        {
+            cout << "[*] Library found: " << libName << endl;
+            cout << "[*] Map Line: " << line << endl;
+            return;
+        }
+    }
+
+    cout << "[*] Library not found: " << libName << endl;
 }
 
 void getProcesses()
@@ -222,10 +91,16 @@ void getProcesses()
     dirent* entry;
     while ((entry = readdir(dir)))
     {
-        cout << "[*] Base apk process: " << entry->d_name << endl;
+        if (entry->d_type == DT_DIR)
+        {
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+            {
+                cout << "[*] Base apk process: " << entry->d_name << endl;
+            }
+        }
     }
-    closedir(dir);
 }
+
 int getLoginUid()
 {
     int fd = open("/proc/self/loginuid", O_RDONLY);
@@ -235,7 +110,8 @@ int getLoginUid()
     close(fd);
     return atoi(buf);
 }
-int getPidFromPkgName(const char* PACKAGE)
+
+pid_t getPidFromPkgName(const char* PACKAGE)
 {
     char path[512];
     DIR* dir = opendir("/proc");
@@ -267,9 +143,24 @@ int getPidFromPkgName(const char* PACKAGE)
     return -1;
 }
 
-int attachTo(const char* PKG, const char* baselib)
+void attachTo(const char* PKG)
 {
-    int PID = getPidFromPkgName(PKG);
+    pid_t PID = getPidFromPkgName(PKG);
+    ptrace(PTRACE_ATTACH, PID, nullptr, nullptr);
+    cout << "[*] Attached to process '" << PKG << "'" << endl;
+    waitpid(PID, nullptr, 0);
+}
+
+void detachFrom(const char* PKG)
+{
+    pid_t PID = getPidFromPkgName(PKG);
+    ptrace(PTRACE_DETACH, PID, nullptr, nullptr);
+    cout << "[*] Detached from process '" << PKG << "'" << endl;
+}
+
+uintptr_t getLibAddr(const char* PKG, const char* lib)
+{
+    pid_t PID = getPidFromPkgName(PKG);
     uintptr_t libBase = 0;
     char libPath[512];
     if (PID != -1)
@@ -279,19 +170,20 @@ int attachTo(const char* PKG, const char* baselib)
     else
     {
         cout << "[*] Package not found: " << PKG << endl;
+        return 0;
     }
-    ptrace(PTRACE_ATTACH, PID, nullptr, nullptr);
-    cout << "[*] Attached to process " << PKG << endl;
-    waitpid(PID, nullptr, 0);
+
+    attachTo(PKG);
     memset(libPath, 0, sizeof(libPath));
-    snprintf(libPath, sizeof(libPath), "/proc/self/maps");
+    snprintf(libPath, sizeof(libPath), "/proc/%d/maps", PID);
     FILE* mapsFile = fopen(libPath, "r");
+
     if (mapsFile)
     {
         char line[256];
         while (fgets(line, sizeof(line), mapsFile))
         {
-            if (strstr(line, baselib))
+            if (strstr(line, lib))
             {
                 char* dash = strchr(line, '-');
                 if (dash)
@@ -304,11 +196,317 @@ int attachTo(const char* PKG, const char* baselib)
         }
         fclose(mapsFile);
     }
-    return PID;
+    detachFrom(PKG);
+    return libBase;
 }
-int detachFrom(int PID)
+
+/* ArmWriter
+*
+* The library writer-class used for doing static & memory patches
+* Provided high-level patch functions using simple bit manipulations
+* Basically can be used not only for Arm architecture, exeptions are 'putRet', 'putNop' and 'modifyReg' functions which are Arm-only in this case */
+
+class ArmWriter
 {
-    ptrace(PTRACE_DETACH, PID, nullptr, nullptr);
-    cout << "[*] Detached from process" << endl;
-    return 0;
+public:
+    ArmWriter(const char* pkg, const char* lib);
+
+    void putBytes(uintptr_t offset, const char* bytes, size_t size);
+    void putStaticBytes(const char* libpath, uintptr_t offset, const char* bytes);
+    void putRet(uintptr_t offset);
+    void putNop(uintptr_t offset);
+    void putByte(uintptr_t offset, uint8_t byte);
+    void putWord(uintptr_t offset, int16_t word);
+    void putDword(uintptr_t offset, int32_t dword);
+    void putLittleDword(uintptr_t offset, int32_t val);
+    void putDoubleDword(uintptr_t offset, int32_t loDword, int32_t hiDword);
+    void putQword(uintptr_t offset, int64_t val);
+    void putString(uintptr_t offset, string s);
+    void modifyReg(const char* PKG, uint32_t arg, uintptr_t val);
+    void protect(uintptr_t offset, size_t size, const char* perms);
+private:
+    pid_t PID;
+    uintptr_t libBase;
+};
+
+ArmWriter::ArmWriter(const char* pkg, const char* lib)
+{
+    PID = getPidFromPkgName(pkg);
+    libBase = getLibAddr(pkg, lib);
+}
+
+void ArmWriter::putStaticBytes(const char* path, uintptr_t offset, const char* bytes)
+{
+    int fd = open(path, O_RDWR);
+    struct stat libstat;
+    fstat(fd, &libstat);
+    void* mappaddr = mmap(NULL, libstat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mappaddr == MAP_FAILED)
+    {
+        perror("[!] Failed to mmap library file\n");
+        close(fd);
+        return;
+    }
+    uintptr_t start_address = (uintptr_t)mappaddr + offset;
+    uintptr_t page_start = start_address & ~(4095UL);
+    size_t size = (start_address - page_start) + 4;
+    protect(page_start, size, "rw");
+    for (int i = 0; i < 4; i++)
+    {
+        *(unsigned char*)(start_address + i) = strtol(bytes + (i * 2), NULL, 16);
+    }
+    protect(page_start, size, "rx");
+    msync(mappaddr, libstat.st_size, MS_SYNC);
+    munmap(mappaddr, libstat.st_size);
+    close(fd);
+}
+
+void ArmWriter::putBytes(uintptr_t offset, const char* bytes, size_t size)
+{
+    uintptr_t patchAddress = libBase + offset;
+    for (size_t i = 0; i < size; ++i) {
+        ptrace(PTRACE_POKETEXT, PID, (void*)(patchAddress + i), (void*)((uintptr_t)bytes[i]));
+    }
+}
+
+void ArmWriter::putRet(uintptr_t offset)
+{
+    putBytes(offset, "1E FF 2F E1", 4); // BX LR (Arm)
+}
+
+void ArmWriter::putNop(uintptr_t offset)
+{
+    putBytes(offset, "00 00 00 EA", 4); // NOP (Arm)
+}
+
+void ArmWriter::putByte(uintptr_t offset, uint8_t val)
+{
+	uint8_t byte = val;
+	buffer.push_back(byte);
+    putBytes(offset, (const char*)buffer.data(), buffer.size());
+}
+
+void ArmWriter::putWord(uintptr_t offset, int16_t val)
+{
+	for (int i = 1; i >= 0; i--) {
+		int16_t word = (val >> (i * 8)) & 0xFF;
+		buffer.push_back(word);
+	}
+    putBytes(offset, (const char*)buffer.data(), buffer.size());
+}
+
+void ArmWriter::putDword(uintptr_t offset, int32_t val)
+{
+    for (int i = 3; i >= 0; i--) {
+		int dword = (val >> (i * 8)) & 0xFF;
+		buffer.push_back(dword);
+	}
+    putBytes(offset, (const char*)buffer.data(), buffer.size());
+}
+
+void ArmWriter::putLittleDword(uintptr_t offset, int32_t val) // little-endian bytes order
+{
+    for (int i = 0; i <= 3; i++) {
+		int32_t dword = (val >> (i * 8)) & 0xFF;
+		buffer.push_back(dword);
+	}
+    putBytes(offset, (const char*)buffer.data(), buffer.size());
+}
+
+void ArmWriter::putDoubleDword(uintptr_t offset, int32_t hiDword, int32_t loDword) // 2-int long, in right 4 bits we put high word, in left 4 bits we put low word
+{
+    putDword(offset, hiDword);
+    putDword(offset, loDword + 4); // goto 4 left bits
+    putBytes(offset, (const char*)buffer.data(), buffer.size());
+}
+
+void ArmWriter::putQword(uintptr_t offset, int64_t val)
+{
+    for (int i = 7; i >= 0; i--) {
+		int64_t qword = (val >> (i * 8)) & 0xFF;
+		buffer.push_back(qword);
+	}
+    putBytes(offset, (const char*)buffer.data(), buffer.size());
+}
+
+void ArmWriter::putString(uintptr_t offset, string s)
+{
+    if (s.empty()) {
+        putDword(offset, -1);
+    } else {
+        for (char c : s) {
+            buffer.push_back(c);
+        }
+        buffer.push_back('\0');
+        putBytes(offset, (const char*)buffer.data(), buffer.size());
+    }
+}
+
+void ArmWriter::modifyReg(const char* PKG, uint32_t arg, uintptr_t val) {
+    pid_t PID = getPidFromPkgName(PKG);
+
+    memset(&regs, 0, sizeof(regs));
+    attachTo(PKG);
+    ptrace(PTRACE_GETREGS, PID, nullptr, &regs);
+
+    /* ARM register names and their usage: http://infocenter.arm.com/help/topic/com.arm.doc.dui0489e/DUI0489E_aapcs.pdf
+     * Modify the appropriate ARM register based on the argument index */
+    switch (arg) {
+        case 0:
+            regs.uregs[0] = val; // r0
+            break;
+        case 1:
+            regs.uregs[1] = val; // r1
+            break;
+        case 2:
+            regs.uregs[2] = val; // r2
+            break;
+        case 3:
+            regs.uregs[3] = val; // r3
+            break;
+        default:
+            cerr << "[!] Argument index out of range" << endl;
+            break;
+    }
+    ptrace(PTRACE_SETREGS, PID, nullptr, &regs);
+    detachFrom(PKG);
+}
+
+void ArmWriter::protect(uintptr_t offset, size_t size, const char* perms)
+{
+    int prot = 0;
+    if (strcmp(perms, "rwx") == 0 || strcmp(perms, "777") == 0)
+    {
+        prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+    }
+    else if (strcmp(perms, "rw") == 0 || strcmp(perms, "766") == 0)
+    {
+        prot = PROT_READ | PROT_WRITE;
+    }
+    else if (strcmp(perms, "rx") == 0 || strcmp(perms, "755") == 0)
+    {
+        prot = PROT_READ | PROT_EXEC;
+    }
+    else if (strcmp(perms, "r") == 0 || strcmp(perms, "444") == 0)
+    {
+        prot = PROT_READ;
+    }
+    else
+    {
+        cerr << "[!] ArmWriter::protect() ERROR: provide 'rwx' (777), 'rw' (766), 'rx' (755) or 'r' (444)" << endl;
+        return;
+    }
+    mprotect((void*)offset, size, prot);
+}
+
+/* ArmReader
+*
+* The library reader-class used for reading memory data
+* Provided high-level read functions using simple bit manipulations
+* Basically can be used not only for Arm architecture */
+
+class ArmReader
+{
+public:
+    ArmReader(const char* pkg, const char* lib);
+
+    uint8_t readByte(uintptr_t offset);
+    int16_t readWord(uintptr_t offset);
+    int32_t readDword(uintptr_t offset);
+    int32_t readLittleDword(uintptr_t offset);
+    pair<int32_t, int32_t> readDoubleDword(uintptr_t offset);
+    int64_t readQword(uintptr_t offset);
+    char* readBytes(uintptr_t offset, size_t size);
+    string readString(uintptr_t offset);
+private:
+    pid_t PID;
+    uintptr_t libBase;
+};
+
+ArmReader::ArmReader(const char* pkg, const char* lib)
+{
+    PID = getPidFromPkgName(pkg);
+    libBase = getLibAddr(pkg, lib);
+}
+
+uint8_t ArmReader::readByte(uintptr_t offset)
+{
+    uint8_t byte = ptrace(PTRACE_PEEKTEXT, PID, (void*)(libBase + offset), nullptr);
+    return byte;
+}
+
+int16_t ArmReader::readWord(uintptr_t offset)
+{
+    int16_t word = 0;
+
+    for (int i = 0; i <= 1; i++)
+    {
+        word |= (readByte(offset) << (8 * (1 - i)));
+    }
+    return word;
+}
+
+int32_t ArmReader::readDword(uintptr_t offset)
+{
+    int32_t dword = 0;
+
+    for (int i = 0; i <= 3; i++)
+    {
+        dword |= (readByte(offset) << (8 * (3 - i)));
+    }
+    return dword;
+}
+
+int32_t ArmReader::readLittleDword(uintptr_t offset) // little-endian bytes order
+{
+    int32_t dword = 0;
+
+    for (int i = 0; i <= 3; i++)
+    {
+        dword |= (readByte(offset) << (i * 8));
+    }
+    return dword;
+}
+
+pair<int32_t, int32_t> ArmReader::readDoubleDword(uintptr_t offset) // 2-int long, from right 4 bits we read high word, from left 4 bits we read low wor
+{
+    int32_t hiDword = ArmReader::readDword(offset);
+    int32_t loDword = ArmReader::readDword(offset + 4); // goto 4 left bits
+    return make_pair(loDword, hiDword);
+}
+
+int64_t ArmReader::readQword(uintptr_t offset)
+{
+    int64_t qword = 0;
+
+    for (int i = 0; i <= 7; i++)
+    {
+        qword |= (readByte(offset) << (8 * (7 - i)));
+    }
+    return qword;
+}
+
+char* ArmReader::readBytes(uintptr_t offset, size_t size)
+{
+    char* data = new char[size];
+    for (size_t i = 0; i < size; i++)
+    {
+        long byte = ptrace(PTRACE_PEEKTEXT, PID, (void*)(libBase + offset + i), nullptr);
+        data[i] = (char)(byte);
+    }
+    return data;
+}
+
+string ArmReader::readString(uintptr_t offset)
+{
+    ostringstream oss;
+    char* buffer = readBytes(offset, 1);
+    while (*buffer != '\0')
+    {
+        oss << *buffer;
+        offset++;
+        buffer = readBytes(offset, 1);
+    }
+    delete[] buffer;
+    return oss.str();
 }
