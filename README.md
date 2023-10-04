@@ -2,17 +2,19 @@
 Simple C hex-patcher for killing Arxan, crypto, patching connection and more
 
 ## Pre-requirements
-*Clang toolchain from Android NDK*
+Currently needed only official **LLVM** toolchain from Andoroid NDK, avilable *[here](https://developer.android.com/ndk/downloads)*
 
-------
+---
+
+Injector compilation: ```make```
+
+The patch library compilation: ```clang++ -fPIC -shared -o libpatch.so libpatch.cpp -target armv7a-linux-androideabi19 -static-libstdc++```
+
+See examples in ```injector.cpp``` and edit patches for your own!
+
+---
 
 ## Usage
-
-Compile to shared library:
-```clang++ -fPIC -shared -o libpatch.so libpatch.cpp -target armv7a-linux-androideabi19 -static-libstdc++``` - for shared library compilation on arm (minimum API is 19)
-
-Or use in-runtime injector:
-```clang++ -o injector injector.cpp -target armv7a-linux-androideabi19 -static-libstdc++``` - for binary compilation on arm (minimum API is 19)
 
 Load binary with termux or adb shell:
 ```adb root``` *requires root (Magisk, SuperSU, etc.)*
